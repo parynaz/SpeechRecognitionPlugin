@@ -31,6 +31,15 @@ public class SpeechRecognition extends CordovaPlugin {
     public static final String ACTION_SPEECH_RECOGNIZE_START = "start";
     public static final String ACTION_SPEECH_RECOGNIZE_STOP = "stop";
     public static final String ACTION_SPEECH_RECOGNIZE_ABORT = "abort";
+
+    //EXTRA FUNCTIONS
+    public static final String ACTION_SPEECH_RECOGNIZE_MUTE = "mute";
+    public static final String ACTION_SPEECH_RECOGNIZE_MUTEDELAY = "mutedelay";
+
+    public static final String ACTION_SPEECH_RECOGNIZE_UNMUTE = "unmute";
+
+
+
     public static final String NOT_PRESENT_MESSAGE = "Speech recognition is not present or enabled";
 
     private CallbackContext speechRecognizerCallbackContext;
@@ -39,6 +48,14 @@ public class SpeechRecognition extends CordovaPlugin {
     private boolean aborted = false;
     private boolean listening = false;
     private String lang;
+
+    //EXTRA FUNCTIONS
+    private Intent intent;
+    private AudioManager mAudioManager;
+    private int mStreamVolume = 0;
+    private int initialVolume = 0;
+    private int maxVolume = 0;
+    private int adjustedVolume = 0;
 
     private static String [] permissions = { Manifest.permission.RECORD_AUDIO };
     private static int RECORD_AUDIO = 0;
@@ -90,6 +107,18 @@ public class SpeechRecognition extends CordovaPlugin {
                     public void run() {
                         recognizer = SpeechRecognizer.createSpeechRecognizer(cordova.getActivity().getBaseContext());
                         recognizer.setRecognitionListener(new SpeechRecognitionListner());
+
+
+                        //EXTRA FUNCTIONS
+                        // Increase volume when initializing
+                        mAudioManager = (AudioManager) cordova.getActivity().getSystemService(Context.AUDIO_SERVICE);
+                        initialVolume = mAudioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
+                        maxVolume = mAudioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+                        //set to 80% of maxvolume on start
+                        adjustedVolume = maxVolume - (maxVolume/3);
+                        mAudioManager.setStreamVolume(AudioManager.STREAM_MUSIC, adjustedVolume, 0);
+                        //mAudioManager.setMode(AudioManager.MODE_IN_CALL);
+                        mAudioManager.setSpeakerphoneOn(true); 
                     }
                     
                 });
@@ -106,11 +135,36 @@ public class SpeechRecognition extends CordovaPlugin {
             this.speechRecognizerCallbackContext = callbackContext;
             this.promptForMic();
         }
+
+
+
+        //EXTRA FUNCTIONS
+        else if(ACTION_SPEECH_RECOGNIZE_MUTEDELAY.equals(action)){
+                mStreamVolume = mAudioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
+                //mute the system
+                muteStreamVolume();
+        }
+        else if(ACTION_SPEECH_RECOGNIZE_MUTE.equals(action)){
+                mStreamVolume = mAudioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
+                mAudioManager.setStreamVolume(AudioManager.STREAM_MUSIC, 0, 0);
+
+        }
+        else if(ACTION_SPEECH_RECOGNIZE_UNMUTE.equals(action)){
+                //get the volume they enter with 
+                setStreamVolumeBack();
+        }
+
         else if (ACTION_SPEECH_RECOGNIZE_STOP.equals(action)) {
             stop(false);
         }
         else if (ACTION_SPEECH_RECOGNIZE_ABORT.equals(action)) {
+            //EXTRA FUNCTIONS
+            setInitialVolumeBack();
+
             stop(true);
+
+            //mAudioManager.setMode(AudioManager.MODE_NORMAL);
+            mAudioManager.setSpeakerphoneOn(false); 
         }
         else {
             // Invalid action
@@ -119,6 +173,26 @@ public class SpeechRecognition extends CordovaPlugin {
         }
         return true;
     }
+
+
+    //EXTRA FUNCTIONS
+    private void muteStreamVolume() {
+        new Handler().postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                mAudioManager.setStreamVolume(AudioManager.STREAM_MUSIC, 0, 0);
+            }
+        }, 600);
+    }
+
+    private void setStreamVolumeBack() {
+        mAudioManager.setStreamVolume(AudioManager.STREAM_MUSIC, mStreamVolume, 0);
+    }
+
+    private void setInitialVolumeBack() {
+        mAudioManager.setStreamVolume(AudioManager.STREAM_MUSIC, initialVolume, 0);
+    }
+
 
     private void startRecognition() {
 
