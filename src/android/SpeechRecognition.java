@@ -38,10 +38,10 @@ public class SpeechRecognition extends CordovaPlugin {
 
 
     //EXTRA FUNCTIONS
-    // public static final String ACTION_SPEECH_RECOGNIZE_MUTE = "mute";
-    // public static final String ACTION_SPEECH_RECOGNIZE_MUTEDELAY = "mutedelay";
+    public static final String ACTION_SPEECH_RECOGNIZE_MUTE = "mute";
+    public static final String ACTION_SPEECH_RECOGNIZE_MUTEDELAY = "mutedelay";
 
-    // public static final String ACTION_SPEECH_RECOGNIZE_UNMUTE = "unmute";
+    public static final String ACTION_SPEECH_RECOGNIZE_UNMUTE = "unmute";
 
 
     public static final String NOT_PRESENT_MESSAGE = "Speech recognition is not present or enabled";
@@ -63,7 +63,47 @@ public class SpeechRecognition extends CordovaPlugin {
     private int mMaxVolume = 0;
     private int mAdjustedVolume = 0;
 
-    private boolean audioPermissionGranted;
+    private boolean audioPermissionGranted = false;
+    private static String [] permissions = { Manifest.permission.RECORD_AUDIO };
+    private static int RECORD_AUDIO = 0;
+
+    protected void getMicPermission()
+    {
+        PermissionHelper.requestPermission(this, RECORD_AUDIO, permissions[RECORD_AUDIO]);
+    }
+
+    private boolean promptForMic()
+    {
+         if(PermissionHelper.hasPermission(this, permissions[RECORD_AUDIO])) {
+            audioPermissionGranted = true;
+            return audioPermissionGranted;
+        }
+
+        else
+        {
+            getMicPermission();
+            return promptForMic();
+        }
+
+        
+
+    }
+
+    public void onRequestPermissionResult(int requestCode, String[] permissions,
+                                          int[] grantResults) throws JSONException
+    {
+        for(int r:grantResults)
+        {
+            if(r == PackageManager.PERMISSION_DENIED)
+            {
+                fireErrorEvent();
+                fireEvent("end");
+                return;
+            }
+        }
+        promptForMic();
+    }
+
 
 
     @Override
@@ -105,6 +145,8 @@ public class SpeechRecognition extends CordovaPlugin {
                 callbackContext.sendPluginResult(new PluginResult(PluginResult.Status.ERROR, NOT_PRESENT_MESSAGE));
             }
 
+            if(promptForMic() == true){
+            
             String lang = args.optString(0, "en");
 
             this.speechRecognizerCallbackContext = callbackContext;
@@ -129,15 +171,13 @@ public class SpeechRecognition extends CordovaPlugin {
             PluginResult res = new PluginResult(PluginResult.Status.NO_RESULT);
             res.setKeepCallback(true);
             callbackContext.sendPluginResult(res);
-
-            mStreamVolume = mAudioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
-            muteStreamVolume();
+            }
 
         }
         else if (ACTION_SPEECH_RECOGNIZE_STOP.equals(action)) {
             paused = true; 
             
-            setStreamVolumeBack();
+            
           
             Handler loopHandler = new Handler(Looper.getMainLooper());
             loopHandler.postAtFrontOfQueue(new Runnable() {
@@ -163,6 +203,21 @@ public class SpeechRecognition extends CordovaPlugin {
             mAudioManager.setSpeakerphoneOn(false);
 
         }
+        //EXTRA FUNCTIONS
+         else if(ACTION_SPEECH_RECOGNIZE_MUTEDELAY.equals(action)){
+                 mStreamVolume = mAudioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
+                 //mute the system
+                 muteStreamVolume();
+         }
+         else if(ACTION_SPEECH_RECOGNIZE_MUTE.equals(action)){
+                 mStreamVolume = mAudioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
+                 mAudioManager.setStreamVolume(AudioManager.STREAM_MUSIC, 0, 0);
+ 
+         }
+         else if(ACTION_SPEECH_RECOGNIZE_UNMUTE.equals(action)){
+                 //get the volume they enter with 
+                 setStreamVolumeBack();
+         }
         
         else {
             // Invalid action
