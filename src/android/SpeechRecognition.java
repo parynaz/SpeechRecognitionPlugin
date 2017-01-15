@@ -22,6 +22,10 @@ import android.speech.RecognizerIntent;
 import android.speech.SpeechRecognizer;
 import android.Manifest;
 
+import android.media.AudioManager;
+import android.content.Context;
+
+
 /**
  * Style and such borrowed from the TTS and PhoneListener plugins
  */
@@ -32,12 +36,12 @@ public class SpeechRecognition extends CordovaPlugin {
     public static final String ACTION_SPEECH_RECOGNIZE_STOP = "stop";
     public static final String ACTION_SPEECH_RECOGNIZE_ABORT = "abort";
 
+
     //EXTRA FUNCTIONS
-    public static final String ACTION_SPEECH_RECOGNIZE_MUTE = "mute";
-    public static final String ACTION_SPEECH_RECOGNIZE_MUTEDELAY = "mutedelay";
+    // public static final String ACTION_SPEECH_RECOGNIZE_MUTE = "mute";
+    // public static final String ACTION_SPEECH_RECOGNIZE_MUTEDELAY = "mutedelay";
 
-    public static final String ACTION_SPEECH_RECOGNIZE_UNMUTE = "unmute";
-
+    // public static final String ACTION_SPEECH_RECOGNIZE_UNMUTE = "unmute";
 
 
     public static final String NOT_PRESENT_MESSAGE = "Speech recognition is not present or enabled";
@@ -46,54 +50,25 @@ public class SpeechRecognition extends CordovaPlugin {
     private boolean recognizerPresent = false;
     private SpeechRecognizer recognizer;
     private boolean aborted = false;
-    private boolean listening = false;
-    private String lang;
 
-    //EXTRA FUNCTIONS
+    boolean paused = false;
     private Intent intent;
+
+    //private boolean listening = false;
+    //private String lang;
+
     private AudioManager mAudioManager;
     private int mStreamVolume = 0;
-    private int initialVolume = 0;
-    private int maxVolume = 0;
-    private int adjustedVolume = 0;
+    private int mInitialVolume = 0;
+    private int mMaxVolume = 0;
+    private int mAdjustedVolume = 0;
 
-    private static String [] permissions = { Manifest.permission.RECORD_AUDIO };
-    private static int RECORD_AUDIO = 0;
+    private boolean audioPermissionGranted;
 
-    protected void getMicPermission()
-    {
-        PermissionHelper.requestPermission(this, RECORD_AUDIO, permissions[RECORD_AUDIO]);
-    }
-
-    private void promptForMic()
-    {
-        if(PermissionHelper.hasPermission(this, permissions[RECORD_AUDIO])) {
-            this.startRecognition();
-        }
-        else
-        {
-            getMicPermission();
-        }
-
-    }
-
-    public void onRequestPermissionResult(int requestCode, String[] permissions,
-                                          int[] grantResults) throws JSONException
-    {
-        for(int r:grantResults)
-        {
-            if(r == PackageManager.PERMISSION_DENIED)
-            {
-                fireErrorEvent();
-                fireEvent("end");
-                return;
-            }
-        }
-        promptForMic();
-    }
 
     @Override
     public boolean execute(String action, JSONArray args, CallbackContext callbackContext) {
+
         // Dispatcher
         if (ACTION_INIT.equals(action)) {
             // init
@@ -108,17 +83,13 @@ public class SpeechRecognition extends CordovaPlugin {
                         recognizer = SpeechRecognizer.createSpeechRecognizer(cordova.getActivity().getBaseContext());
                         recognizer.setRecognitionListener(new SpeechRecognitionListner());
 
-
-                        //EXTRA FUNCTIONS
-                        // Increase volume when initializing
                         mAudioManager = (AudioManager) cordova.getActivity().getSystemService(Context.AUDIO_SERVICE);
-                        initialVolume = mAudioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
-                        maxVolume = mAudioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
-                        //set to 80% of maxvolume on start
-                        adjustedVolume = maxVolume - (maxVolume/3);
-                        mAudioManager.setStreamVolume(AudioManager.STREAM_MUSIC, adjustedVolume, 0);
-                        //mAudioManager.setMode(AudioManager.MODE_IN_CALL);
-                        mAudioManager.setSpeakerphoneOn(true); 
+                        mInitialVolume = mAudioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
+                        mMaxVolume = mAudioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+                        mAdjustedVolume = mMaxVolume - mMaxVolume/3;
+                        mAudioManager.setStreamVolume(AudioManager.STREAM_MUSIC, mAdjustedVolume, 0);
+                        mAudioManager.setSpeakerphoneOn(true);
+                     
                     }
                     
                 });
@@ -127,45 +98,72 @@ public class SpeechRecognition extends CordovaPlugin {
             }
         }
         else if (ACTION_SPEECH_RECOGNIZE_START.equals(action)) {
+            paused = false;
+
             // recognize speech
             if (!recognizerPresent) {
                 callbackContext.sendPluginResult(new PluginResult(PluginResult.Status.ERROR, NOT_PRESENT_MESSAGE));
             }
-            this.lang = args.optString(0, "en");
+
+            String lang = args.optString(0, "en");
+
             this.speechRecognizerCallbackContext = callbackContext;
-            this.promptForMic();
+
+            intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
+            intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
+            intent.putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE,"voice.recognition.test");
+            intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE,lang);
+
+            intent.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS,5);
+
+            Handler loopHandler = new Handler(Looper.getMainLooper());
+            loopHandler.post(new Runnable() {
+
+                @Override
+                public void run() {
+                    recognizer.startListening(intent);
+                }
+
+            });
+
+            PluginResult res = new PluginResult(PluginResult.Status.NO_RESULT);
+            res.setKeepCallback(true);
+            callbackContext.sendPluginResult(res);
+
+            mStreamVolume = mAudioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
+            muteStreamVolume();
+
         }
-
-
-
-        //EXTRA FUNCTIONS
-        else if(ACTION_SPEECH_RECOGNIZE_MUTEDELAY.equals(action)){
-                mStreamVolume = mAudioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
-                //mute the system
-                muteStreamVolume();
-        }
-        else if(ACTION_SPEECH_RECOGNIZE_MUTE.equals(action)){
-                mStreamVolume = mAudioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
-                mAudioManager.setStreamVolume(AudioManager.STREAM_MUSIC, 0, 0);
-
-        }
-        else if(ACTION_SPEECH_RECOGNIZE_UNMUTE.equals(action)){
-                //get the volume they enter with 
-                setStreamVolumeBack();
-        }
-
         else if (ACTION_SPEECH_RECOGNIZE_STOP.equals(action)) {
-            stop(false);
+            paused = true; 
+            
+            setStreamVolumeBack();
+          
+            Handler loopHandler = new Handler(Looper.getMainLooper());
+            loopHandler.postAtFrontOfQueue(new Runnable() {
+                @Override
+                public void run() {
+                    recognizer.cancel();
+                }
+            });
         }
         else if (ACTION_SPEECH_RECOGNIZE_ABORT.equals(action)) {
-            //EXTRA FUNCTIONS
+            paused = true;
+
             setInitialVolumeBack();
 
-            stop(true);
+            Handler loopHandler = new Handler(Looper.getMainLooper());
+            loopHandler.postAtFrontOfQueue(new Runnable() {
+                @Override
+                public void run() {
+                    recognizer.cancel();
+                }
+            });
 
-            //mAudioManager.setMode(AudioManager.MODE_NORMAL);
-            mAudioManager.setSpeakerphoneOn(false); 
+            mAudioManager.setSpeakerphoneOn(false);
+
         }
+        
         else {
             // Invalid action
             String res = "Unknown action: " + action;
@@ -175,7 +173,8 @@ public class SpeechRecognition extends CordovaPlugin {
     }
 
 
-    //EXTRA FUNCTIONS
+      //EXTRA FUNCTIONS
+        //EXTRA FUNCTIONS
     private void muteStreamVolume() {
         new Handler().postDelayed(new Runnable() {
             @Override
@@ -189,33 +188,8 @@ public class SpeechRecognition extends CordovaPlugin {
         mAudioManager.setStreamVolume(AudioManager.STREAM_MUSIC, mStreamVolume, 0);
     }
 
-    private void setInitialVolumeBack() {
-        mAudioManager.setStreamVolume(AudioManager.STREAM_MUSIC, initialVolume, 0);
-    }
-
-
-    private void startRecognition() {
-
-        final Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
-        intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
-        intent.putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE,"voice.recognition.test");
-        intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE,lang);
-
-        intent.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS,5);
-
-        Handler loopHandler = new Handler(Looper.getMainLooper());
-        loopHandler.post(new Runnable() {
-
-            @Override
-            public void run() {
-                recognizer.startListening(intent);
-            }
-
-        });
-
-        PluginResult res = new PluginResult(PluginResult.Status.NO_RESULT);
-        res.setKeepCallback(true);
-        this.speechRecognizerCallbackContext.sendPluginResult(res);
+     private void setInitialVolumeBack() {
+        mAudioManager.setStreamVolume(AudioManager.STREAM_MUSIC, mInitialVolume, 0);
     }
     
     private void stop(boolean abort) {
@@ -317,12 +291,25 @@ public class SpeechRecognition extends CordovaPlugin {
 
         @Override
         public void onError(int error) {
-            Log.d(LOG_TAG, "error speech "+error);
-            if (listening || error == 9) {
-                fireErrorEvent();
-                fireEvent("end");
+            Log.d(LOG_TAG, "error speech");
+            if(!paused && (error == SpeechRecognizer.ERROR_NO_MATCH || error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT)) {
+                Log.d(LOG_TAG, "didn't recognize any speech");
+                Handler loopHandler = new Handler(Looper.getMainLooper());
+                loopHandler.post(new Runnable() {
+
+                    @Override
+                    public void run() {
+                        if(recognizer != null) {
+                            recognizer.stopListening();
+                            recognizer.cancel();
+                            recognizer.destroy();
+                            recognizer = SpeechRecognizer.createSpeechRecognizer(cordova.getActivity().getBaseContext());
+                            recognizer.setRecognitionListener(new SpeechRecognitionListner());
+                            recognizer.startListening(intent);
+                        }
+                    }
+                });
             }
-            listening = false;
         }
 
         @Override
@@ -338,7 +325,7 @@ public class SpeechRecognition extends CordovaPlugin {
         @Override
         public void onReadyForSpeech(Bundle params) {
             Log.d(LOG_TAG, "ready for speech");
-            listening = true;
+            //listening = true;
         }
 
         @Override
@@ -355,7 +342,25 @@ public class SpeechRecognition extends CordovaPlugin {
                 Log.d(LOG_TAG, "fire no match event");
                 fireEvent("nomatch");
             }
-            listening = false;
+            Log.d(LOG_TAG, "after results");
+            Handler loopHandler = new Handler(Looper.getMainLooper());
+            if(paused) {
+                loopHandler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        recognizer.cancel();
+                    }
+
+                });
+            } else {
+                loopHandler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        recognizer.startListening(intent);
+                    }
+
+                });
+            }
         }
 
         @Override
