@@ -78,4 +78,18 @@ SpeechRecognition.prototype.abort = function() {
     exec(null, null, "SpeechRecognition", "abort", []);
 };
 
+
+// EXTRA FUNCTIONS
+
+SpeechRecognition.prototype.mute = function() {
+    exec(null, null, "SpeechRecognition", "mute", []);
+};
+
+SpeechRecognition.prototype.unmute = function() {
+    exec(null, null, "SpeechRecognition", "unmute", []);
+};
+SpeechRecognition.prototype.mutedelay = function() {
+    exec(null, null, "SpeechRecognition", "mutedelay", []);
+};
+
 module.exports = SpeechRecognition;
