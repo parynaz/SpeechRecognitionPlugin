@@ -24,6 +24,11 @@ import android.Manifest;
 
 import android.media.AudioManager;
 import android.content.Context;
+import android.app.AlertDialog;
+import android.content.Context;
+import android.content.DialogInterface;
+import android.app.Activity;
+import android.app.Fragment;
 
 
 /**
@@ -82,7 +87,8 @@ public class SpeechRecognition extends CordovaPlugin {
         else
         {
             getMicPermission();
-            return promptForMic();
+            //return promptForMic();
+            return audioPermissionGranted;
         }
 
         
@@ -96,9 +102,9 @@ public class SpeechRecognition extends CordovaPlugin {
         {
             if(r == PackageManager.PERMISSION_DENIED)
             {
-                fireErrorEvent();
-                fireEvent("end");
-                return;
+                //fireErrorEvent();
+                //fireEvent("end");
+                //return;
             }
         }
         promptForMic();
@@ -143,6 +149,12 @@ public class SpeechRecognition extends CordovaPlugin {
             // recognize speech
             if (!recognizerPresent) {
                 callbackContext.sendPluginResult(new PluginResult(PluginResult.Status.ERROR, NOT_PRESENT_MESSAGE));
+            }
+
+            if(promptForMic() == false){
+                while(promptForMic() == false){
+                    promptForMic();
+                }
             }
 
             if(promptForMic() == true){
