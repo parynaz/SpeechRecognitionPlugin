@@ -1,7 +1,7 @@
 SpeechRecognitionPlugin - Extra Functions
 =======================
 
-Adjusted to loop on the listener and always listen to voice. This causes a continous beep sound, which can be heard twice before the mute is enabled. 
+Adjusted to loop on the listener to always listen to voice. This causes a continous beep sound, which can be heard twice before the mute is enabled. 
 
 Extra functions: options for a mute with delay and a hard mute.
 
